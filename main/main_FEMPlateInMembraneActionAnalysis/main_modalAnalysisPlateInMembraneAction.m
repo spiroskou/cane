@@ -52,8 +52,8 @@ addpath('../../FEMPlateInMembraneActionAnalysis/solvers/',...
 
 % Define the path to the case
 pathToCase = '../../inputGiD/FEMPlateInMembraneActionAnalysis/';
-% caseName = 'cantileverBeamPlaneStress_modalAnalysis';
-caseName = 'infinitePlateWithHole_modalAnalysis';
+caseName = 'cantileverBeamPlaneStress_modalAnalysis';
+% caseName = 'infinitePlateWithHole_modalAnalysis';
 
 % Parse the data from the GiD input file
 [strMsh, homDOFs, inhomDOFs, valuesInhomDOFs, propNBC, propAnalysis, ...
@@ -105,9 +105,13 @@ dHat = zeros(numDOFs,1);
     caseName, pathToOutput, 'outputEnabled');
 
 %% Postprocessing
-% graph.visualization.geometry = 'reference_and_current';
-% resultant = 'stress';
-% component = 'y';
-% graph.index = plot_currentConfigurationAndResultants(strMsh,homDBC,dHat,parameters,analysis,resultant,component,graph);
+graph.visualization.geometry = 'reference_and_current';
+resultant = 'displacement';
+component = '2norm';
+numEig = 2;
+dHat_modal = eigenmodeShapes(:, numEig);
+graph.index = plot_currentConfigurationAndResultants ...
+    (propAnalysis, strMsh, homDOFs, dHat_modal, [], [], propParameters, ...
+    resultant, component, graph);
 
 %% END OF THE SCRIPT
