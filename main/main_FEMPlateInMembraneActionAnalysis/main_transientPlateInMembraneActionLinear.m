@@ -49,27 +49,29 @@ addpath('../../FEMPlateInMembraneActionAnalysis/solvers/',...
         '../../FEMPlateInMembraneActionAnalysis/graphics/',...
         '../../FEMPlateInMembraneActionAnalysis/output/',...
         '../../FEMPlateInMembraneActionAnalysis/initialConditions/',...
-        '../../FEMPlateInMembraneActionAnalysis/postprocessing/');
+        '../../FEMPlateInMembraneActionAnalysis/postprocessing/', ...
+        '../../FEMPlateInMembraneActionAnalysis/transient/');
 
 %% Parse data from GiD input file
 
 % Define the path to the case
 pathToCase = '../../inputGiD/FEMPlateInMembraneActionAnalysis/';
 
-<<<<<<< HEAD
 % caseName = 'curvedPlateTipShearPlaneStressTransient';
 % caseName = 'cantileverBeamPlaneStressTransientNLinear';
-% caseName = 'turek_csd';
 caseName = 'PlateWithMultipleHolesInVibrationTransientAnalysisTriangles';
-=======
-caseName = 'curvedPlateTipShearPlaneStressTransient';
-% caseName = 'cantileverBeamPlaneStressTransientNLinear';
->>>>>>> d1ed5a70e95ff69cfd8ca29b2defa030a00b7e1c
+% caseName = 'turek_csd';
 
 % Parse the data from the GiD input file
 [strMsh, homDBC, inhomDBC, valuesInhomDBC, propNBC, propAnalysis, ...
     parameters, propNLinearAnalysis, propStrDynamics, propGaussInt] = ...
     parse_StructuralModelFromGid(pathToCase, caseName, 'outputEnabled');
+% propNLinearAnalysis.eps = 1e-3;
+propNLinearAnalysis.method = 'UNDEFINED';
+% propStrDynamics.method = 'BOSSAK';
+
+% Define traction vector
+propNBC.tractionLoadVct = [0; -1e1; 0];
 
 %% UI
 
@@ -83,7 +85,7 @@ solve_LinearSystem = @solve_LinearSystemMatlabBackslashSolver;
 computeInitCnds = @computeInitCndsFEMPlateInMembraneAction;
 
 % Define the amplitude of the externally applied load and time duration
-propNBC.tractionVector = [-1e5; 0; 0];
+propNBC.tractionVector = [-1e-1; 0; 0];
 propNBC.endTime = 1;
 
 % Assign the function handles for the computation of the stiffness matrix 
@@ -106,12 +108,13 @@ if isLinear
     computeProblemMatricesSteadyState = @computeStiffMtxAndLoadVctFEMPlateInMembraneActionCST;
     solve_FEMSystem = @solve_FEMLinearSystem;
 else
-    computeProblemMatricesSteadyState = @computeTangentStiffMtxResVctFEMPlateInMembraneAction;
+%     computeProblemMatricesSteadyState = @computeTangentStiffMtxResVctFEMPlateInMembraneAction;
+    computeProblemMatricesSteadyState = @computeTangentStiffMtxResVctFEMPlateInMembraneActionCST;
     solve_FEMSystem = @solve_FEMNLinearSystem;
 end
 
 % On the writing the output function
-propVTK.isOutput = true;
+propVTK.isOutput = false;
 propVTK.writeOutputToFile = @writeOutputFEMPlateInMembraneActionToVTK;
 propVTK.VTKResultFile = 'undefined';
 
@@ -145,6 +148,30 @@ if strcmp(propStrDynamics.method,'BOSSAK')
     propStrDynamics.gammaB = .6; % .6
 end
 
+% Assign two significant eigenfrequencies
+freqI = 4.656892249680108;
+freqJ = 8.953736617642974;
+
+% Assign the corresponding logarithmic decrements
+zetaI = .1;
+zetaJ = .1;
+
+% Compute the corresponding circular frequencies
+omegaI = 1e2*199.77; % 2*pi*freqI;
+omegaJ = 1e2*300; % 2*pi*freqJ;
+
+% Compute the Rayleigh damping parameters
+detM = omegaJ/omegaI - omegaI/omegaJ;
+coef = 2/detM;
+alphaR = coef*(omegaJ*zetaI - omegaI*zetaJ);
+betaR = coef*(-1/omegaJ*zetaI + 1/omegaI*zetaJ);
+
+% Rayleigh damping
+propStrDynamics.damping.method = 'rayleigh';
+propStrDynamics.damping.computeDampMtx = @computeDampMtxRayleighFEM;
+propStrDynamics.damping.alpha = alphaR;
+propStrDynamics.damping.beta = betaR;
+
 % Initialize graphics index
 graph.index = 1;
 
@@ -152,7 +179,6 @@ graph.index = 1;
 % graph.index = plot_referenceConfigurationFEMPlateInMembraneAction(strMsh,analysis,F,homDBC,graph,'outputEnabled');
 
 %% Solve the plate in membrane action problem
-propVTK.isOutput = false;
 [dHat, minElSize] = solve_FEMPlateInMembraneActionTransient ...
     (propAnalysis, strMsh, homDBC, inhomDBC, valuesInhomDBC, ...
     updateInhomDOFs, propNBC, @computeLoadVctFEMPlateInMembraneActionPointLoad, ...
@@ -166,5 +192,13 @@ propVTK.isOutput = false;
 % resultant = 'stress';
 % component = 'y';
 % graph.index = plot_currentConfigurationAndResultants(strMsh,homDBC,dHat,parameters,analysis,resultant,component,graph);
+id = ismember(strMsh.nodes(:,2:4), [5 1 0], 'rows');
+pos = find(id==true);
+node_id = strMsh.nodes(pos,1);
+dy = zeros(propStrDynamics.noTimeSteps, 1);
+for ii = 1:propStrDynamics.noTimeSteps
+    dy(ii, 1) = dHat(2*node_id, ii);
+end
+plot(propStrDynamics.T0+propStrDynamics.dt:propStrDynamics.dt:propStrDynamics.TEnd, dy);
 
 %% END OF THE SCRIPT

@@ -373,7 +373,8 @@ if isfield(propTransientAnalysis, 'damping')
         fprintf(strcat(tab, '------------------------------------------\n\n'));
     end 
     dampMtx = propTransientAnalysis.damping.computeDampMtx...
-        (propAnalysis, msh, propParameters, propGaussInt);
+        (propAnalysis, massMtx, msh, numDOFs, propParameters, propGaussInt, ...
+        propTransientAnalysis, tab, outMsg);
 else
     dampMtx = 'undefined';
 end
